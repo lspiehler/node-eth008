@@ -1,20 +1,10 @@
-const http = require('http');
-var opened = false;
+var net = require('net');
+var connected = false;
+var connecting = false;
 var cachevalid = false;
-var ip = '192.168.0.200';
-var port = 17494;
-var username = 'admin';
-var password = 'password';
 var relaypositions = [0, 0, 0, 0, 0, 0, 0, 0];
-var options = {
-    host: ip,
-    port: port,
-    path: '/io.cgi',
-    method: 'GET',
-    headers: {
-        'Authorization': 'Basic ' + new Buffer.from(username + ':' + password).toString('base64')
-    }
-}
+var client;
+var authenticated = false;
 
 var validRelay = function(relay) {
     //console.log(relay);
@@ -37,89 +27,102 @@ var validPosition = function(position) {
     }
 }
 
-var request = function(params, callback) {
-    var data = [];
-    options.path = params.path;
+var connectBoard = function(callback) {
+    client = new net.Socket();
 
-    var req = http.request(options, function(res) {
-
-        res.on('data', function(chunk) {
-            data.push(chunk);
-        });
-
-        res.on('end', function(){
-            let responsebody = JSON.parse(new Buffer.concat(data).toString());
-            let response = {
-                statusCode: res.statusCode,
-                statusMessage: res.statusMessage,
-                headers: res.headers,
-                data: responsebody
-            }
-            if(response.error_message) {
-                callback(response.error_message, response);
-            } else {
-                callback(false, response);
-            }
-        });
-
-        res.on('error', function(e){
-            callback(e, false);
-        });
+    client.connect(port, ip, function() {
+        connecting = true;
+        console.log('Connecting');
     });
 
-    if(params.body) {
-        req.write(JSON.stringify(params.body));
-    } else {
-        //req.write();
-    }
+    client.on('close', function() {
+        console.log('Connection closed');
+        connected = false;
+    });
 
-    req.end();
+    client.on('error', function(err) {
+        console.log(err);
+    });
+
+    client.on('connect', function() {
+        connected = true;
+        connecting = false;
+        callback(false);
+    });
 }
 
-var setRelayPosition = function(params, callback) {
-    let path = '/io.cgi?DOA2=0';
+var authenticateBoard = function(callback) {
+    let data = [121, 112, 97, 115, 115, 119, 111, 114, 100]
+    //console.log(new Buffer.from(data));
+    client.write(new Buffer.from(data));
 
-    request({path: path, body: body}, function(err, resp) {
-        if(err) {
-            callback(err, false);
+    let response = client.on('data', function(data) {
+        console.log('Auth response');
+        console.log(data);
+        //console.log(new Buffer.from([1]));
+        if(data[0]==1) {
+            authenticated = true
+            callback(false);
+            response = null;
         } else {
-            if(resp.statusCode==200) {
-
-            } else {
-                callback(true, resp);
-            }
+            callback('Authentication failure');
+            response = null;
         }
+        //client.destroy(); // kill client after server's response
     });
 }
 
-var writeRelayPosition = function(params, callback) {
-    if(validRelay(params.relay)) {
-        if(validPosition(params.position)) {
-            let path = '/io.cgi?DOA2=0';
+var authTimer = function() {
+    setTimeout(function() {
+        authenticated = false;
+    }, 25000);
+}
 
-            request({path: path}, function(err, resp) {
+var prepConnection = function(callback) {
+    console.log('called');
+    if(connected) {
+        if(authenticated) {
+            callback(false);
+        } else {
+            authenticateBoard(function(err) {
                 if(err) {
-                    console.trace(err);
                     callback(err);
                 } else {
-                    if(resp.statusCode==200) {
-                        console.trace(err);
-                        callback(err);
-                    } else {
-                        relaypositions[params.relay - 1] = params.position;
-                        //console.log('Relay:' + (params.relay - 1));
-                        //console.log('Position: ' + params.position);
-                        //console.log(relaypositions);
-                        callback(false);
-                    }
+                    //callback(false);
+                    prepConnection(callback);
                 }
             });
-        } else {
-            callback('Invalid position specified');
         }
     } else {
-        callback('Invalid relay specified');
+        connectBoard(function(err) {
+            if(err) {
+                callback(err);
+            } else {
+                prepConnection(callback);
+            }
+        })
     }
+}
+
+var writeRelayPosition = function() {
+    //let data = [33, 2, 0]
+    prepConnection(function(err) {
+        if(err) {
+            console.log(err);
+        } else {
+            let data = [35, 0, 0]
+            client.write(new Buffer.from(data));
+
+            client.on('data', function(data) {
+                console.log('Relay command response');
+                console.log(data);
+            });
+        }
+    });
+    /*setTimeout(function() {
+        let data = [32, 2, 0]
+        client.write(new Buffer.from(data));
+    }, 1000);*/
 }
 
 var eth008 = function(options) {
@@ -130,9 +133,6 @@ var eth008 = function(options) {
         }
         if(options.port) {
             port = options.port
-        }
-        if(options.username) {
-            username = options.username
         }
         if(options.password) {
             password = options.password
@@ -151,8 +151,8 @@ var eth008 = function(options) {
     }
 }
 
-let board = new eth008();
-board.setRelayPosition({relay: 4, position: 1}, function(err) {
+let board = new eth008({ip: '192.168.0.200', port: 17494, password: 'password'});
+board.setRelayPosition({relay: 2, position: 1}, function(err) {
     if(err) {
 
     } else {
