@@ -1,6 +1,6 @@
 {
   "name": "node-eth008",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "Library for controlling a devantech eth008, an 8-port ethernet relay board.",
   "main": "index.js",
   "scripts": {
