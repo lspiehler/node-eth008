@@ -260,6 +260,8 @@ var eth008 = function(options) {
     }
 }
 
+module.exports = eth008;
+
 /*let board = new eth008({ip: '192.168.0.200', port: 17494, password: 'password'});
 board.setRelayPosition({relay: 0, position: 0}, function(err) {
     if(err) {

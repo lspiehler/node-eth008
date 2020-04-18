@@ -1,0 +1,26 @@
+{
+  "name": "node-eth008",
+  "version": "0.0.5",
+  "description": "Library for controlling a devantech eth008, an 8-port ethernet relay board.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lspiehler/node-eth008.git"
+  },
+  "keywords": [
+    "devantech",
+    "eth008",
+    "relay",
+    "robot-electronics",
+    "board"
+  ],
+  "author": "Lyas Spiehler",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/lspiehler/node-eth008/issues"
+  },
+  "homepage": "https://github.com/lspiehler/node-eth008#readme"
+}
