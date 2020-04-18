@@ -2,9 +2,12 @@ var net = require('net');
 var connected = false;
 var connecting = false;
 var cachevalid = false;
+var busy = false;
 var relaypositions = [0, 0, 0, 0, 0, 0, 0, 0];
+var callbackrouter;
 var client;
 var authenticated = false;
+var authenticating = false;
 
 var validRelay = function(relay) {
     //console.log(relay);
@@ -49,14 +52,46 @@ var connectBoard = function(callback) {
         connecting = false;
         callback(false);
     });
+
+    client.on('data', function(data) {
+        responseHandler(data);
+    });
+}
+
+var responseHandler = function(data) {
+    if(callbackrouter) {
+        if(authenticating) {
+            authenticating = false;
+            console.log('Auth response');
+            console.log(data);
+            //console.log(new Buffer.from([1]));
+            if(data[0]==1) {
+                authenticated = true
+                authTimer();
+                callbackrouter(false);
+            } else {
+                callbackrouter('Authentication failure');
+            }
+        } else {
+            callbackrouter(data);
+        }
+        busy = false;
+        console.log(data);
+        callbackrouter = null;
+    } else {
+        console.log('Unexpected response from relay board');
+        console.log(data);
+    }
 }
 
 var authenticateBoard = function(callback) {
+    callbackrouter = callback
+    authenticating = true;
     let data = [121, 112, 97, 115, 115, 119, 111, 114, 100]
     //console.log(new Buffer.from(data));
     client.write(new Buffer.from(data));
 
-    let response = client.on('data', function(data) {
+    /*let response = client.on('data', function(data) {
         console.log('Auth response');
         console.log(data);
         //console.log(new Buffer.from([1]));
@@ -69,17 +104,18 @@ var authenticateBoard = function(callback) {
             response = null;
         }
         //client.destroy(); // kill client after server's response
-    });
+    });*/
 }
 
 var authTimer = function() {
     setTimeout(function() {
         authenticated = false;
+        console.log('authentication timer triggered');
     }, 25000);
 }
 
 var prepConnection = function(callback) {
-    console.log('called');
+    //console.log('called');
     if(connected) {
         if(authenticated) {
             callback(false);
@@ -104,25 +140,43 @@ var prepConnection = function(callback) {
     }
 }
 
-var writeRelayPosition = function() {
+var writeRelayPosition = function(params, callback) {
     //let data = [33, 2, 0]
-    prepConnection(function(err) {
-        if(err) {
-            console.log(err);
+    if(busy==false) {
+        busy = true;
+        let cmd;
+        if(validRelay(params.relay)) {
+            if(validPosition(params.position)) {
+                if(params.position==0) {
+                    cmd = 33
+                } else {
+                    cmd = 32
+                }
+            } else {
+                callback('Invalid position requested');
+            }
         } else {
-            let data = [35, 0, 0]
-            client.write(new Buffer.from(data));
-
-            client.on('data', function(data) {
-                console.log('Relay command response');
-                console.log(data);
-            });
+            callback('Invalid relay requested')
+            return
         }
-    });
-    /*setTimeout(function() {
-        let data = [32, 2, 0]
-        client.write(new Buffer.from(data));
-    }, 1000);*/
+        prepConnection(function(err) {
+            if(err) {
+                console.log(err);
+            } else {
+                console.log('after prep connection')
+                callbackrouter = callback;
+                let data = [cmd, params.relay, 0]
+                client.write(new Buffer.from(data));
+
+                /*client.on('data', function(data) {
+                    console.log('Relay command response');
+                    console.log(data);
+                });*/
+            }
+        });
+    } else {
+        callback('busy');
+    }
 }
 
 var eth008 = function(options) {
@@ -152,11 +206,11 @@ var eth008 = function(options) {
 }
 
 let board = new eth008({ip: '192.168.0.200', port: 17494, password: 'password'});
-board.setRelayPosition({relay: 2, position: 1}, function(err) {
+board.setRelayPosition({relay: 1, position: 1}, function(err) {
     if(err) {
-
+        console.log(err);
     } else {
-
+        console.log('done');
     }
 });
 
